@@ -130,12 +130,12 @@ class babelium_gateway{
 		$proxybypass = function_exists('is_proxybypass') ? is_proxybypass($query_string) : false;
 		
 		//Prepare the cURL request
-		if (!$ch = curl_init($url)) {
+		if (!$ch = curl_init($query_string)) {
 			debugging('Can not init curl.');
 			return false;
 		}
 		
-		curl_setopt($ch, CURLOPT_URL, $query_string);
+		//curl_setopt($ch, CURLOPT_URL, $query_string);
 		curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
 		curl_setopt($ch, CURLOPT_POST, 1);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
