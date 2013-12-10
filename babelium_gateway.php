@@ -96,10 +96,13 @@ class babelium_gateway{
 							   'filter_babelium_secretaccesskey');
 		
 		foreach($config_fields as $cfield){
-			if(!isset($CFG->$cfield) || empty($CFG->$cfield))
+			if(!isset($CFG->$cfield) || empty($CFG->$cfield)){
 				$this->display_error('babeliumErrorConfigParameters');
-			if(($cfield == 'filter_babelium_accesskey' && strlen($CFG->$cfield)!=20 ) || ($cfield == 'filter_babelium_secretaccesskey' && strlen($CFG->$cfield)!=40))
+			}
+			if(($cfield == 'filter_babelium_accesskey' && strlen($CFG->$cfield)!=20 ) || 
+			   ($cfield == 'filter_babelium_secretaccesskey' && strlen($CFG->$cfield)!=40)){
 				$this->display_error('babeliumErrorConfigParameters');
+			}
 		}
 		
 		$commProtocol = 'http://';
@@ -112,8 +115,13 @@ class babelium_gateway{
 		
 		//Date timestamp formated following one of the standards allowed for HTTP 1.1 date headers (DATE_RFC1123)
 		$date = date("D, d M Y H:i:s O");
+		$referer = $_SERVER['HTTP_REFERER'];
+		$pieces = parse_url($referer);
+		$originhost = $_SERVER['HTTP_HOST']; 
+		$origin = $pieces['scheme'] . "://" . $originhost;
+		
 		$request['header']['date'] = $date;
-		$signature = "BMP ".$CFG->filter_babelium_accesskey.":".$this->generateAuthorization($method, $date, $CFG->filter_babelium_secretaccesskey);
+		$signature = "BMP ".$CFG->filter_babelium_accesskey.":".$this->generateAuthorization($method, $date, $originhost, $CFG->filter_babelium_secretaccesskey);
 		$request['header']['authorization'] = $signature;
 		
 		//See this workaround if the query parameters are written with &amp; : http://es.php.net/manual/es/function.http-build-query.php#102324
@@ -123,8 +131,8 @@ class babelium_gateway{
 		$web_domain = $CFG->filter_babelium_serverdomain;
 		$api_domain = $CFG->filter_babelium_apidomain;
 		$api_endpoint = $CFG->filter_babelium_apiendpoint;
-		$referer = $commProtocol . $api_domain . '/' . $api_endpoint;
-		$query_string = $referer . '?' . $method;
+		$api_url = $commProtocol . $api_domain . '/' . $api_endpoint;
+		$query_string = $api_url . '?' . $method;
 		
 		//Check if proxy (if used) should be bypassed for this url
 		$proxybypass = function_exists('is_proxybypass') ? is_proxybypass($query_string) : false;
@@ -141,6 +149,7 @@ class babelium_gateway{
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt($ch, CURLOPT_REFERER, $referer);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, array("Origin: $origin"));
 		
 		//Check for proxy configuration		
 		if (!empty($CFG->proxyhost) and !$proxybypass) {
@@ -179,7 +188,7 @@ class babelium_gateway{
 		$this->parseCurlOutput($result);
 		
 		//Add the service call to the activity log to better track down possible problems
-		$this->activity_log($USER->id, $USER->username, "service_call",$query_string, $method, is_array($parameters)?implode('&',$parameters):$parameters, $date, $_SERVER['HTTP_HOST'], $signature, $this->_curlHeaderHttpStatusCode, $this->_curlHeaderHttpStatusMessage);
+		$this->activity_log($USER->id,$USER->username, "service_call",$query_string, $method, is_array($parameters)?implode('&',$parameters):$parameters, $date, $_SERVER['HTTP_HOST'], $signature, $this->_curlHeaderHttpStatusCode, $this->_curlHeaderHttpStatusMessage);
 		
 		//If the body of the response is empty or the HTTP status code is not 200 display an error message
 		if(!$this->_curlResponse || $this->_curlHeaderHttpStatusCode != 200)
@@ -204,10 +213,11 @@ class babelium_gateway{
 	 * @return String $signature
 	 * 		The authorization header of the request
 	 */
-	private function generateAuthorization($method, $date, $key){
-		$stringtosign = utf8_encode($method . "\n" . $date . "\n" . $_SERVER['HTTP_HOST']);
+	private function generateAuthorization($method, $date, $origin, $skey){
+		
+		$stringtosign = utf8_encode($method . "\n" . $date . "\n" . $origin);
 		    	
-		$digest = hash_hmac("sha256", $stringtosign, $key, false);
+		$digest = hash_hmac("sha256", $stringtosign, $skey, false);
 		$signature = base64_encode($digest);	
 		return $signature;
 	}
